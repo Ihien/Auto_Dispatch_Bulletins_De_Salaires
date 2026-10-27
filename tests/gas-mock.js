@@ -52,6 +52,11 @@ function creerEnvironnement() {
     classeurs: new Map(),
     journaux: [],
     surchargesCdn: {},
+    classeurHoteId: null,
+    utilisateurActif: 'admin.rh@entreprise.bf',
+    menus: [],
+    alertes: [],
+    reponsesAlertes: [],
     nouvelId: (prefixe) => prefixe + '_' + (++compteurId)
   };
 
@@ -151,6 +156,25 @@ function creerEnvironnement() {
           if (!classeur) throw new Error('Classeur introuvable : ' + id);
           return classeur;
         },
+        getActiveSpreadsheet: () => (env.classeurHoteId ? env.classeurs.get(env.classeurHoteId) : null),
+        getUi: () => ({
+          Button: { OK: 'OK', YES: 'YES', NO: 'NO' },
+          ButtonSet: { OK: 'OK', YES_NO: 'YES_NO' },
+          alert: (...args) => {
+            const [titre, message] = args.length === 1 ? ['', args[0]] : args;
+            env.alertes.push({ titre, message });
+            return env.reponsesAlertes.length ? env.reponsesAlertes.shift() : 'OK';
+          },
+          createMenu: (nom) => {
+            const menu = { nom, elements: [] };
+            const constructeur = {
+              addItem: (libelle, fonction) => { menu.elements.push({ libelle, fonction }); return constructeur; },
+              addSeparator: () => { menu.elements.push(null); return constructeur; },
+              addToUi: () => { env.menus.push(menu); }
+            };
+            return constructeur;
+          }
+        }),
         create: (nom) => {
           const classeur = env.creerClasseur(nom, { 'Feuille 1': [] });
           env.journaux.push(classeur);
@@ -199,7 +223,8 @@ function creerEnvironnement() {
       LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
       Session: {
         getScriptTimeZone: () => 'UTC',
-        getEffectiveUser: () => ({ getEmail: () => 'admin.rh@entreprise.bf' })
+        getEffectiveUser: () => ({ getEmail: () => 'admin.rh@entreprise.bf' }),
+        getActiveUser: () => ({ getEmail: () => env.utilisateurActif })
       },
       UrlFetchApp: {
         fetch: (url) => {

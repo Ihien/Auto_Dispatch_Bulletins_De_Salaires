@@ -66,25 +66,28 @@ page. Il n'y a rien à faire entre le lancement et le rapport final, envoyé par
 Prérequis : un compte Google Workspace (Business Standard ou Enterprise) ayant accès en écriture
 aux dossiers Drive concernés et en lecture à la table de correspondance.
 
-1. Créer un projet Apps Script autonome sur <https://script.google.com>.
+1. Ouvrir le Google Sheet de correspondance, puis *Extensions > Apps Script*. Le projet ainsi
+   créé est rattaché au Sheet, ce qui permet d'afficher le menu « Bulletins de salaire ».
+   (Un projet autonome créé sur <https://script.google.com> fonctionne aussi, mais sans menu :
+   il faut alors renseigner `SHEET_CORRESPONDANCE_ID` et lancer les fonctions depuis l'éditeur.)
 2. Copier les fichiers de `src/` dans le projet (même nom, extension `.gs`), puis remplacer le
    manifeste : *Paramètres du projet > Afficher le fichier manifeste « appsscript.json »*.
 
    Ou bien, avec [clasp](https://github.com/google/clasp) :
    ```bash
    npm install -g @google/clasp && clasp login
-   cp .clasp.json.example .clasp.json   # renseigner scriptId
+   cp .clasp.json.example .clasp.json   # scriptId : Paramètres du projet > ID du script
    clasp push
    ```
-3. *Paramètres du projet > Propriétés du script* : renseigner au minimum les trois identifiants
-   ci-dessous. L'identifiant d'un dossier ou d'un classeur est la partie de son URL après
+3. *Paramètres du projet > Propriétés du script* : renseigner au minimum les identifiants
+   obligatoires ci-dessous. L'identifiant d'un dossier ou d'un classeur est la partie de son URL après
    `/folders/` ou `/d/`.
 
 | Propriété | Obligatoire | Défaut | Rôle |
 |---|---|---|---|
 | `DOSSIER_SOURCE_ID` | oui | | Dossier où déposer le PDF maître |
 | `DOSSIER_RACINE_ID` | oui | | Racine de l'archivage `AAAA/MM` |
-| `SHEET_CORRESPONDANCE_ID` | oui | | Google Sheet Matricule / Email |
+| `SHEET_CORRESPONDANCE_ID` | si projet autonome | Sheet hôte | Google Sheet Matricule / Email |
 | `ONGLET_CORRESPONDANCE` | | 1er onglet | Nom de l'onglet |
 | `COLONNE_MATRICULE` / `COLONNE_EMAIL` | | `1` / `2` | Colonnes (1 = A) |
 | `LIGNE_EN_TETE` | | `true` | Ignorer la première ligne |
@@ -98,8 +101,10 @@ aux dossiers Drive concernés et en lecture à la table de correspondance.
 | `MAX_PAGES_PAR_LOT` | | `0` (illimité) | Limiter un lot (essai pilote) |
 | `BUDGET_TEMPS_MS` | | `300000` | Durée d'un lot avant mise en pause |
 | `CREER_JOURNAL` | | `true` | Créer le journal d'audit |
+| `UTILISATEURS_AUTORISES` | | tous les éditeurs | Adresses autorisées à utiliser le menu, séparées par des virgules |
 
-4. Exécuter **`verifierConfiguration`** depuis l'éditeur et accepter les autorisations demandées.
+4. Recharger le Sheet : le menu **Bulletins de salaire** apparaît. Choisir *Vérifier la
+   configuration* et accepter les autorisations demandées (première fois seulement).
    Ce contrôle n'écrit rien et n'envoie rien. Il affiche le nombre de matricules lus, le nombre
    de pages du PDF, le matricule reconnu sur les 3 premières pages et le quota restant.
 
@@ -107,21 +112,28 @@ aux dossiers Drive concernés et en lecture à la table de correspondance.
 
 1. Déposer le PDF de paie (et lui seul) dans le dossier source.
 2. Recommandé le premier mois : renseigner `EMAIL_REDIRECTION` avec votre adresse et
-   `MAX_PAGES_PAR_LOT=5`, lancer, vérifier les courriels reçus, puis exécuter
-   `reinitialiserTraitement`, supprimer ces deux propriétés et les fichiers de test.
-3. Exécuter **`lancerTraitement`**. Les lots s'enchaînent seuls ; compter environ 15 à 25 minutes
-   pour 600 bulletins (les appels Drive et Gmail prennent environ 1 à 2 s par page).
-4. Suivre l'avancement avec **`afficherEtat`** ou dans *Exécutions*.
+   `MAX_PAGES_PAR_LOT=5`, lancer, vérifier les courriels reçus, puis *Abandonner le traitement
+   en cours*, supprimer ces deux propriétés et les fichiers de test.
+3. Menu *Bulletins de salaire > Lancer l'envoi des bulletins…*. Le contrôle à blanc s'exécute,
+   puis un résumé (fichier, nombre de pages, matricules non routables, quota) demande
+   confirmation. Après « Oui », le Sheet rend la main tout de suite : les lots tournent en
+   arrière-plan et le Sheet peut être fermé. Compter environ 15 à 25 minutes pour 600 bulletins
+   (les appels Drive et Gmail prennent environ 1 à 2 s par page).
+4. Suivre l'avancement avec *Voir l'avancement*.
 5. Lire le rapport final reçu par courriel, puis traiter les fichiers du dossier `Anomalies` et
    les lignes `ECHEC_ENVOI` du journal (corriger la table, puis envoyer à la main).
 
-| Fonction | Effet |
-|---|---|
-| `verifierConfiguration` | Contrôle à blanc de l'installation |
-| `lancerTraitement` | Démarre le traitement du PDF du dossier source |
-| `traiterLot` | Reprise (appelée par les déclencheurs ; peut être lancée à la main après une alerte) |
-| `afficherEtat` | Progression en cours, ou dernier rapport |
-| `reinitialiserTraitement` | Abandonne le traitement en cours (les fichiers créés sont conservés) |
+| Menu | Fonction équivalente (éditeur) | Effet |
+|---|---|---|
+| Vérifier la configuration | `verifierConfiguration` | Contrôle à blanc de l'installation |
+| Lancer l'envoi des bulletins… | `lancerTraitement` | Démarre le traitement du PDF du dossier source |
+| Voir l'avancement | `afficherEtat` | Progression en cours, ou dernier rapport |
+| Abandonner le traitement en cours… | `reinitialiserTraitement` | Abandonne le traitement (les fichiers créés sont conservés) |
+| | `traiterLot` | Reprise (appelée par les déclencheurs ; à lancer à la main après une alerte) |
+
+**Les courriels partent du compte de la personne qui lance le traitement**, et les reprises
+automatiques s'exécutent sous ce même compte. Ce compte doit donc disposer du quota Workspace et
+rester actif jusqu'à la fin.
 
 ### Adapter la regex au modèle de bulletin
 
@@ -140,11 +152,18 @@ Vérifiez le résultat avec `verifierConfiguration` (aperçu des 3 premières pa
   Les courriels partent du compte exécutant via Gmail.
 - Le script tourne sous le compte qui le lance. Utilisez un compte RH dédié et limitez le partage
   du dossier racine, en particulier du sous-dossier `Anomalies`.
+- Tout éditeur du Sheet de correspondance voit le menu **et peut modifier le code** du projet
+  rattaché. Limitez donc les droits d'édition du Sheet à l'équipe paie. `UTILISATEURS_AUTORISES`
+  restreint en plus l'usage du menu : il évite une fausse manœuvre, mais ne protège pas d'un
+  éditeur malveillant. Avec un compte hors du domaine, Google ne communique pas toujours
+  l'adresse de l'utilisateur, et l'accès est alors refusé.
+- Pas de déploiement en application web : le menu suffit et n'expose aucune URL.
 - Les bibliothèques sont téléchargées depuis jsDelivr à chaque lot, puis exécutées seulement si
   leur empreinte SHA-256 correspond à celle figée dans `src/Config.gs`. Pour changer de version,
   mettez à jour l'URL et l'empreinte
   (`curl -s URL | openssl dgst -sha256 -binary | base64`).
-- Portées OAuth demandées : Drive, Sheets, Gmail (envoi), requêtes externes (CDN), déclencheurs.
+- Portées OAuth demandées : Drive, Sheets (et menu), Gmail (envoi), requêtes externes (CDN),
+  déclencheurs.
 
 ## Limites connues
 
@@ -173,7 +192,8 @@ npm test
 Scénarios couverts : traitement en plusieurs lots avec anomalies, doublon et contrôle
 d'intégrité ; quota épuisé puis reprise sans doublon ; échec d'envoi isolé ; budget de temps nul ;
 mot « Matricule » fragmenté dans le PDF ; mode test ; bibliothèque altérée sur le CDN ;
-garde-fous de lancement ; contrôle à blanc ; lecture de la table de correspondance.
+garde-fous de lancement ; contrôle à blanc ; lecture de la table de correspondance ; menu
+(installation, lancement confirmé ou refusé, avancement, abandon, contrôle d'accès, erreurs).
 
 Les tests ne remplacent pas un essai réel dans Apps Script (étape 2 de l'exploitation), seul à
 même de valider les autorisations et les temps de réponse de Drive et Gmail.

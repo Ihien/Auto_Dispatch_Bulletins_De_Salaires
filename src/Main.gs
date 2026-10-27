@@ -8,11 +8,19 @@
  *   - traiterLot()            : reprise automatique (appelée par déclencheur).
  *   - afficherEtat()          : progression du traitement en cours.
  *   - reinitialiserTraitement() : abandonne le traitement en cours.
+ *
+ * Les mêmes actions sont proposées dans le menu du Google Sheet (Menu.gs).
  */
 
 /** Démarre un nouveau traitement puis enchaîne immédiatement le premier lot. */
 async function lancerTraitement() {
   var debut = Date.now();
+  initialiserTraitement_();
+  await executerLot_(debut);
+}
+
+/** Crée l'état d'un nouveau traitement ; refuse si un traitement est déjà en cours. */
+function initialiserTraitement_() {
   var config = lireConfig_();
   validerConfig_(config);
 
@@ -31,13 +39,14 @@ async function lancerTraitement() {
     var arborescence = preparerArborescence_(config, periode);
     var idTraitement = Utilities.formatDate(maintenant, Session.getScriptTimeZone(), 'yyyyMMdd-HHmmss');
     var journalId = config.CREER_JOURNAL ? creerJournal_(arborescence.mois, periode, idTraitement) : '';
-    sauvegarderEtat_(nouvelEtat_(fichier, periode, arborescence, journalId, idTraitement));
+    var etat = nouvelEtat_(fichier, periode, arborescence, journalId, idTraitement);
+    sauvegarderEtat_(etat);
     console.log('Traitement ' + idTraitement + ' initialisé pour « ' + fichier.getName() + ' », période ' +
       periode.annee + '/' + periode.mois + '.');
+    return etat;
   } finally {
     verrou.releaseLock();
   }
-  await executerLot_(debut);
 }
 
 /** Gestionnaire du déclencheur temporel de reprise. */

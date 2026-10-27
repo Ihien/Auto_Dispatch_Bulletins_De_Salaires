@@ -3,14 +3,15 @@
  *
  * Les valeurs par défaut ci-dessous peuvent être surchargées sans modifier le
  * code, via « Paramètres du projet > Propriétés du script » (même clé).
- * Les trois identifiants marqués OBLIGATOIRE doivent être renseignés.
+ * Les identifiants marqués OBLIGATOIRE doivent être renseignés.
  */
 var CONFIG_DEFAUT = {
   // OBLIGATOIRE — dossier Drive où est déposé le PDF maître (un seul PDF à la fois).
   DOSSIER_SOURCE_ID: '',
   // OBLIGATOIRE — dossier racine de l'archivage (Racine / AAAA / MM).
   DOSSIER_RACINE_ID: '',
-  // OBLIGATOIRE — Google Sheet de correspondance Matricule / Adresse Email.
+  // Google Sheet de correspondance Matricule / Adresse Email. Facultatif si le
+  // script est rattaché à ce Sheet (menu « Bulletins de salaire »).
   SHEET_CORRESPONDANCE_ID: '',
 
   // Onglet de la table de correspondance (vide = premier onglet).
@@ -52,7 +53,12 @@ var CONFIG_DEFAUT = {
   // Mode test : si renseigné, TOUS les courriels sont envoyés à cette adresse.
   EMAIL_REDIRECTION: '',
   // Destinataire du rapport de fin de traitement (vide = compte exécutant).
-  EMAIL_RAPPORT: ''
+  EMAIL_RAPPORT: '',
+
+  // Adresses autorisées à utiliser le menu, séparées par des virgules
+  // (vide = tous les éditeurs du Sheet). Les courriels partent du compte
+  // de la personne qui lance le traitement.
+  UTILISATEURS_AUTORISES: ''
 };
 
 /**
@@ -103,6 +109,10 @@ function lireConfig_() {
       config[cle] = String(valeur);
     }
   });
+  if (!config.SHEET_CORRESPONDANCE_ID) {
+    var classeurHote = SpreadsheetApp.getActiveSpreadsheet();
+    if (classeurHote) config.SHEET_CORRESPONDANCE_ID = classeurHote.getId();
+  }
   return config;
 }
 

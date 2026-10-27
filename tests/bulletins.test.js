@@ -296,3 +296,95 @@ test('table de correspondance : en-tête, normalisation et doublons contradictoi
   const annuaire = c.chargerAnnuaire_(c.lireConfig_());
   assert.deepEqual({ ...annuaire }, { A1: 'a1@ex.bf', A2: '', A3: 'a3@ex.bf', 1234: 'num@ex.bf' });
 });
+
+/** Simule un script rattaché au Sheet de correspondance (sans SHEET_CORRESPONDANCE_ID). */
+async function preparerSheetHote(matricules, proprietes = {}) {
+  const contexte = await preparer(matricules, proprietes);
+  contexte.env.classeurHoteId = contexte.env.proprietes.SHEET_CORRESPONDANCE_ID;
+  delete contexte.env.proprietes.SHEET_CORRESPONDANCE_ID;
+  return contexte;
+}
+
+test('menu : installé à l\'ouverture du Sheet', async () => {
+  const { env } = await preparerSheetHote(['EMP001']);
+  await env.executer('onOpen');
+  assert.equal(env.menus.length, 1);
+  assert.equal(env.menus[0].nom, 'Bulletins de salaire');
+  const fonctions = env.menus[0].elements.filter(Boolean).map((e) => e.fonction);
+  assert.deepEqual(fonctions, ['menuVerifier', 'menuLancer', 'menuAvancement', 'menuAbandonner']);
+  const { contexte } = await env.executer('afficherEtat');
+  for (const fonction of fonctions) assert.equal(typeof contexte[fonction], 'function', fonction);
+});
+
+test('menu : lancement confirmé, rendu immédiat puis traitement par déclencheurs', async () => {
+  const { env } = await preparerSheetHote(['EMP001', 'EMP002', 'EMP999']);
+  env.reponsesAlertes.push('YES');
+  const r = await env.executer('menuLancer');
+  assert.equal(r.erreur, null);
+
+  const [confirmation, lance] = env.alertes;
+  assert.match(confirmation.titre, /Lancer/);
+  assert.match(confirmation.message, /3 pages/);
+  assert.match(confirmation.message, /votre compte \(admin\.rh@entreprise\.bf\)/);
+  assert.equal(lance.titre, 'Traitement lancé');
+  assert.equal(bulletinsEnvoyes(env).length, 0, 'aucun envoi pendant l\'action du menu');
+  assert.equal(etat(env).pageSuivante, 0);
+  assert.equal(env.declencheurs.length, 1);
+
+  await env.executerDeclencheurs();
+  assert.equal(etat(env), null);
+  assert.equal(bulletinsEnvoyes(env).length, 2);
+});
+
+test('menu : lancement refusé à la confirmation', async () => {
+  const { env } = await preparerSheetHote(['EMP001']);
+  env.reponsesAlertes.push('NO');
+  await env.executer('menuLancer');
+  assert.equal(env.alertes.length, 1);
+  assert.equal(etat(env), null);
+  assert.equal(env.declencheurs.length, 0);
+});
+
+test('menu : traitement déjà en cours, avancement et abandon', async () => {
+  const { env } = await preparerSheetHote(['EMP001', 'EMP002'], { MAX_PAGES_PAR_LOT: '1' });
+  await env.executer('lancerTraitement');
+
+  await env.executer('menuLancer');
+  assert.equal(env.alertes.pop().titre, 'Traitement déjà en cours');
+
+  await env.executer('menuAvancement');
+  assert.match(env.alertes.pop().message, /EN_COURS — page 1\/2/);
+
+  env.reponsesAlertes.push('YES');
+  await env.executer('menuAbandonner');
+  assert.equal(env.alertes.pop().message, 'Traitement abandonné.');
+  assert.equal(etat(env), null);
+  assert.equal(env.declencheurs.length, 0);
+});
+
+test('menu : accès limité aux utilisateurs autorisés', async () => {
+  const { env } = await preparerSheetHote(['EMP001'], {
+    UTILISATEURS_AUTORISES: 'Paie@Entreprise.bf, admin.rh@entreprise.bf'
+  });
+  env.utilisateurActif = 'stagiaire@entreprise.bf';
+  env.reponsesAlertes.push('YES');
+  await env.executer('menuLancer');
+  assert.match(env.alertes[0].message, /Accès refusé : stagiaire@entreprise\.bf/);
+  assert.equal(etat(env), null);
+
+  env.utilisateurActif = '';
+  await env.executer('menuVerifier');
+  assert.match(env.alertes[1].message, /utilisateur non identifié/);
+
+  env.utilisateurActif = 'paie@entreprise.bf';
+  await env.executer('menuVerifier');
+  assert.match(env.alertes[2].message, /Configuration valide/);
+});
+
+test('menu : erreur de configuration affichée dans une alerte', async () => {
+  const { env } = await preparerSheetHote(['EMP001']);
+  delete env.proprietes.DOSSIER_RACINE_ID;
+  const r = await env.executer('menuVerifier');
+  assert.equal(r.erreur, null);
+  assert.match(env.alertes[0].message, /DOSSIER_RACINE_ID n'est pas renseigné/);
+});
